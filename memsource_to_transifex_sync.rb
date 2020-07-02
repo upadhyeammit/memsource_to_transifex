@@ -1,57 +1,101 @@
+# frozen_string_literal: true
+
 require 'rest-client'
 require 'json'
 require 'pry'
 require 'parallel'
+require 'transifex'
 
-projects = ['foreman']
-langs = ['es','fr','zh_ch','pt_br']
+Transifex.configure do |c|
+  c.client_login = 'aupadhye@redhat.com'
+  c.client_secret = '***'
+end
+
+@project = 'test-foreman'
 domainName = 'Satellite'
-project_upload_date = '25-05-2020'
-@resouce = RestClient::Resource.new('https://cloud.memsource.com/web/api2/v1/', :headers => { :content_type => 'application/json'})
-@api_url = 'https://cloud.memsource.com/web/api2/v1/'
+@project_upload_date = /2020-07-02/ #yyy-mm-dd
+@mem_api_url = 'https://cloud.memsource.com/web/api2/v1/'
+@tran_api_url = 'https://www.transifex.com/api/2/'
+
+@resouce = RestClient::Resource.new(@mem_api_url.to_s, headers: { content_type: 'application/json' })
 @work_dir = '/tmp/memsource/'
-def get_token
-	payload = {'userName' => 'aupadhye', 'password' => '***'}.to_json
-	response = @resouce['auth/login'].post(payload)
-	@token ||= parse_json(response)['token']
+
+def token
+  payload = { 'userName' => 'aupadhye', 'password' => '***' }.to_json
+  response = @resouce['auth/login'].post(payload)
+  @token ||= parse_json(response)['token']
 end
 
 def parse_json(body)
-	JSON.parse(body)
+  JSON.parse(body)
 end
 
-def get_id_name
-  keys = ['id','name']
-  response = RestClient.get "#{@api_url}projects/?token=#{get_token}", {:params => {'pageSize' => 50, 'domainName' => 'Satellite'}}
-  projects ||= parse_json(response)["content"]
-  Parallel.map(projects, in_threads:25) do |p|
-  	if p['createdBy']['userName'] == 'aupadhye'
-  	  p.select {|k,v| keys.include? k }
-  	end
+def id_name
+  keys = %w[id name]
+  response = RestClient.get "#{@mem_api_url}projects/?token=#{token}", { params: { 'pageSize' => 50, 'domainName' => 'Satellite' } }
+  projects ||= parse_json(response)['content']
+  Parallel.map(projects, in_threads: 25) do |p|
+    if p['createdBy']['userName'] == 'aupadhye' && p['dateCreated'] =~ @project_upload_date
+      p.select { |k, _v| keys.include? k }
+    end
   end.compact
 end
 
 def get_jobs(pid)
-  keys = ['targetLang','uid','status']
-  response = RestClient.get "#{@api_url}projects/#{pid}/jobs/?token=#{get_token}"
-  jobs ||= parse_json(response)["content"]
-  Parallel.map(jobs, in_threads:10) do |j|
-  	j.select {|k,_| keys.include? k}
+  keys = %w[targetLang uid status]
+  response = RestClient.get "#{@mem_api_url}projects/#{pid}/jobs/?token=#{token}"
+  jobs ||= parse_json(response)['content']
+  Parallel.map(jobs, in_threads: 10) do |j|
+    j.select { |k, _| keys.include? k }
   end.compact
 end
 
-def get_pot_files
-  Parallel.each(get_id_name,in_threads: 25) do |project|
-    jobs = get_jobs(project['id'])
-  	Dir.mkdir("#{@work_dir}/#{project['name']}") if !Dir.exist?("#{@work_dir}/#{project['name']}")
-  		Parallel.each(jobs, in_threads:10) do |j|
-  	  	response = RestClient.get "#{@api_url}projects/#{project['id']}/jobs/#{j['uid']}/targetFile/?token=#{get_token}"
-  	  	puts "Saving file for project #{project['name']} and lang #{j['targetLang']}"
-  	  	f = File.new("#{@work_dir}/#{project['name']}/#{project['name']}--#{j['targetLang']}", 'w')
-        # trim first two and last one line
-  	  	f.write(response.body.lines[3..-2].join)
-  	 end
+def pot_files
+  Parallel.each(id_name, in_threads: 25) do |resource|
+    jobs = get_jobs(resource['id'])
+    Parallel.each(jobs, in_threads: 10) do |job|
+      response = RestClient.get "#{@mem_api_url}projects/#{resource['id']}/jobs/#{job['uid']}/targetFile/?token=#{token}"
+      puts "Saving file for resource #{resource['name']} and lang #{job['targetLang']}"
+      # trim first two and last one line
+      write_tx(resource['name'], job['targetLang'], response.body.lines[3..-2].join)
+    end
   end
- end
+end
 
-get_pot_files
+def write_tx(r_name, lang, content)
+  lang_map = { 'ja' => 'ja', 'es' => 'es', 'fr' => 'fr', 'zh_cn' => 'zh_CN', 'pt_br' => 'pt_BR' }
+  @project = Transifex::Project.new('test-foreman')
+  options = { :i18n_type => "PO", :content => content }
+  begin
+    @project.resource(r_name).translation(lang_map[lang]).update(options)
+  rescue StandardError => e
+    puts red("** Failed to upload translation for project #{r_name} and lang #{lang}")
+    puts e.message
+    if @mode == 'memsource'
+      unless Dir.exist?("#{@work_dir}/#{r_name}")
+        Dir.mkdir("#{@work_dir}/#{r_name}")
+      end
+      puts "** Writing file to #{@work_dir}/#{r_name}/#{lang} for investigation"
+      f = File.new("#{@work_dir}/#{r_name}/#{lang}", 'w')
+      f.write(content)
+    end
+  end
+end
+
+def work_dir_pot_files
+  Parallel.each(Dir.children(@work_dir), in_threads: 12) do |resource|
+    Parallel.each(Dir.children("#{@work_dir}/#{resource}"), in_threads: 5) do |lang|
+      file_name = "#{@work_dir}/#{resource}/#{lang}"
+      content = File.new(file_name)
+      write_tx(resource,lang,content.read)
+    end
+  end
+end
+
+if ARGV[0] == 'filesystem'
+  @mode = 'filesystem'
+  work_dir_pot_files
+else
+  @mode = 'memsource'
+  pot_files
+end
