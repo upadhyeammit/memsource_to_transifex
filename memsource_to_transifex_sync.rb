@@ -2,14 +2,8 @@
 
 require 'rest-client'
 require 'json'
-require 'pry'
 require 'parallel'
 require 'transifex'
-
-Transifex.configure do |c|
-  c.client_login = 'aupadhye@redhat.com'
-  c.client_secret = '***'
-end
 
 @project = 'test-foreman'
 domainName = 'Satellite'
@@ -20,14 +14,23 @@ domainName = 'Satellite'
 @resouce = RestClient::Resource.new(@mem_api_url.to_s, headers: { content_type: 'application/json' })
 @work_dir = '/tmp/memsource/'
 
-def token
-  payload = { 'userName' => 'aupadhye', 'password' => '***' }.to_json
-  response = @resouce['auth/login'].post(payload)
-  @token ||= parse_json(response)['token']
-end
-
 def parse_json(body)
   JSON.parse(body)
+end
+
+def auth
+  parse_json(File.read('auth.json'))
+end
+
+Transifex.configure do |c|
+  c.client_login = auth['transifex']['username']
+  c.client_secret = auth['transifex']['password']
+end
+
+def token
+  payload = { 'userName' => auth['memsource']['username'], 'password' => auth['memsource']['password'] }.to_json
+  response = @resouce['auth/login'].post(payload)
+  @token ||= parse_json(response)['token']
 end
 
 def id_name
@@ -35,7 +38,7 @@ def id_name
   response = RestClient.get "#{@mem_api_url}projects/?token=#{token}", { params: { 'pageSize' => 50, 'domainName' => 'Satellite' } }
   projects ||= parse_json(response)['content']
   Parallel.map(projects, in_threads: 25) do |p|
-    if p['createdBy']['userName'] == 'aupadhye' && p['dateCreated'] =~ @project_upload_date
+    if p['createdBy']['userName'] == auth['memsource']['username'] && p['dateCreated'] =~ @project_upload_date
       p.select { |k, _v| keys.include? k }
     end
   end.compact
@@ -69,8 +72,8 @@ def write_tx(r_name, lang, content)
   begin
     @project.resource(r_name).translation(lang_map[lang]).update(options)
   rescue StandardError => e
-    puts red("** Failed to upload translation for project #{r_name} and lang #{lang}")
     puts e.message
+    puts "** Failed to upload translation for project #{r_name} and lang #{lang}"
     if @mode == 'memsource'
       unless Dir.exist?("#{@work_dir}/#{r_name}")
         Dir.mkdir("#{@work_dir}/#{r_name}")
