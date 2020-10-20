@@ -5,6 +5,7 @@ require 'parallel'
 require 'transifex'
 require './common.rb'
 include Common
+
 class MemSource
   MEMSOURCE_API_URL = 'https://cloud.memsource.com/web/'
   DOMAIN_NAME = 'Satellite'
@@ -47,14 +48,14 @@ class MemSource
   end
 
   def create_project(resource_name, template)
-    binding.pry
     rest_client = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v2/projects/applyTemplate/#{template}?token=#{@token}", headers: { content_type: 'application/json' })
     payload = { 'name' => resource_name }.to_json
     response = rest_client.post(payload)
+    JSON.parse(response.body)['uid']
   end
 
   def upload_locale(project_uuid, content, file_name, lang)
-    rest_client = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v1/projects/#{project_uuid}/jobs?token=#{@token}", headers: {content_type: 'application/octet-stream', 'Content-Disposition': "filename=#{file_name}", 'Memsource': '{"targetLangs": [lang]}'})
+    rest_client = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v1/projects/#{project_uuid}/jobs?token=#{@token}", headers: {content_type: 'application/octet-stream', 'Content-Disposition': "filename=#{file_name}", 'Memsource': "{'targetLangs': [#{lang}]}" })
     response = rest_client.post(content)
   end
 end

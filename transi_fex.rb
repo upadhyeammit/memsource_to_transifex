@@ -31,8 +31,8 @@ class TransiFex
     project.resources.fetch
   end
 
-  def translation(resource, lang, with_file = false,file_path='')
-    return resource.translation(lang).fetch_with_file(path_to_file: file_path) if with_file
+  def translation(resource, lang, file_path='')
+    return resource.translation(lang).fetch_with_file(path_to_file: file_path) if !file_path.empty?
 
     resource.translation(lang).fetch
   end
