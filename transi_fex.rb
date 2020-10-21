@@ -6,6 +6,7 @@ require './common'
 include Common
 # Class for all vars and methods for Transifex
 class TransiFex
+  LANG_MAP = {"es"=>"es", "fr"=>"fr", "ja"=>"ja", "pt_br"=>"pt_BR", "zh_cn"=>"zh_CN"}
   def initialize(langs, project_name, resource_names, work_dir)
     @project_name = project_name
     @resource_names = resource_names
@@ -28,21 +29,21 @@ class TransiFex
   def resources(name = [])
     return project.resource(name) if !name.empty?
 
-    project.resources.fetch
+    @resources ||= project.resources.fetch
   end
 
   def translation(resource, lang, file_path='')
+    resource = resources(resource) if resource.is_a?(String)
     return resource.translation(lang).fetch_with_file(path_to_file: file_path) if !file_path.empty?
 
     resource.translation(lang).fetch
   end
 
   def write_tx(r_name, lang, content)
-    lang_map = { 'ja' => 'ja', 'es' => 'es', 'fr' => 'fr', 'zh_cn' => 'zh_CN', 'pt_br' => 'pt_BR' }
     @project = Transifex::Project.new('foreman')
     options = { :i18n_type => "PO", :content => content }
     begin
-      @project.resource(r_name).translation(lang_map[lang]).update(options)
+      @project.resource(r_name).translation(LANG_MAP[lang]).update(options)
     rescue StandardError => e
       puts e.message
       puts "** Failed to upload translation for project #{r_name} and lang #{lang}"
