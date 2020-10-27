@@ -26,12 +26,12 @@ class MemSource
     @token ||= parse_json(response)['token']
   end
 
-  def id_name
+  def project_ids_names(date_created = '')
     keys = %w[id name]
-    response = RestClient.get "#{@mem_api_url}projects/?token=#{@token}", { params: { 'pageSize' => 50, 'domainName' => 'Satellite' } }
+    response = RestClient.get "#{MEMSOURCE_API_URL}/api2/v1/projects/?token=#{@token}", { params: { 'pageSize' => 50, 'domainName' => 'Satellite' } }
     projects ||= parse_json(response)['content']
     Parallel.map(projects, in_threads: 25) do |p|
-      if p['createdBy']['userName'] == auth['memsource']['username'] && p['dateCreated'] =~ @project_upload_date
+      if p['createdBy']['userName'] == auth['memsource']['username'] && p['dateCreated'] =~ date_created
         p.select { |k, _v| keys.include? k }
       end
     end.compact
@@ -58,4 +58,11 @@ class MemSource
     rest_client = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v1/projects/#{project_uuid}/jobs?token=#{@token}", headers: {content_type: 'application/octet-stream', 'Content-Disposition': "filename=#{file_name}", 'Memsource': "{'targetLangs': [#{lang}]}" })
     response = rest_client.post(content)
   end
+
+  def pot_file(project_id, job_uuid)
+    response = RestClient.get "#{MEMSOURCE_API_URL}/api2/v1/projects/#{project_id}/jobs/#{job_uuid}/targetFile/?token=#{@token}"
+    # trim first two and last one line
+    response.body.lines[3..-2].join)
+  end
+
 end
