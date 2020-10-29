@@ -4,7 +4,6 @@ require 'json'
 require 'parallel'
 require 'transifex'
 require './common.rb'
-include Common
 
 class MemSource
   MEMSOURCE_API_URL = 'https://cloud.memsource.com/web/'
@@ -14,24 +13,25 @@ class MemSource
     @project_upload_date = date #yyy-mm-dd
     @langs = langs
     @project_names = resource_names # this should be array
-    @work_dir = work_dir
+    @work_dir = work_dir+'/'+'memsource'
     @resouce = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v1/", headers: { content_type: 'application/json' })
+    Common::create_work_dir(@work_dir)
     authentiate
   end
 
   # @mem_api_url = 'https://cloud.memsource.com/web/api2/v1/'
   def authentiate
-    payload = { 'userName' => auth['memsource']['username'], 'password' => auth['memsource']['password'] }.to_json
+    payload = { 'userName' => Common::auth['memsource']['username'], 'password' => Common::auth['memsource']['password'] }.to_json
     response = @resouce['auth/login'].post(payload)
-    @token ||= parse_json(response)['token']
+    @token ||= Common::parse_json(response)['token']
   end
 
   def project_ids_names(date_created = '')
     keys = %w[id name]
-    response = RestClient.get "#{MEMSOURCE_API_URL}/api2/v1/projects/?token=#{@token}", { params: { 'pageSize' => 50, 'domainName' => 'Satellite' } }
-    projects ||= parse_json(response)['content']
+    response = RestClient.get "#{MEMSOURCE_API_URL}api2/v1/projects/?token=#{@token}", { params: { 'pageSize' => 50, 'domainName' => 'Satellite' } }
+    projects ||= Common::parse_json(response)['content']
     Parallel.map(projects, in_threads: 25) do |p|
-      if p['createdBy']['userName'] == auth['memsource']['username'] && p['dateCreated'] =~ date_created
+      if p['createdBy']['userName'] == Common::auth['memsource']['username'] && p['dateCreated'] =~ date_created
         p.select { |k, _v| keys.include? k }
       end
     end.compact
@@ -41,7 +41,7 @@ class MemSource
     rest_client = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v1/projects/#{pid}/jobs/?token=#{@token}")
     keys = %w[targetLang uid status]
     response = rest_client.get
-    jobs ||= parse_json(response)['content']
+    jobs ||= Common::parse_json(response)['content']
     Parallel.map(jobs, in_threads: 10) do |j|
       j.select { |k, _| keys.include? k }
     end.compact
@@ -60,9 +60,9 @@ class MemSource
   end
 
   def pot_file(project_id, job_uuid)
-    response = RestClient.get "#{MEMSOURCE_API_URL}/api2/v1/projects/#{project_id}/jobs/#{job_uuid}/targetFile/?token=#{@token}"
+    response = RestClient.get "#{MEMSOURCE_API_URL}api2/v1/projects/#{project_id}/jobs/#{job_uuid}/targetFile/?token=#{@token}"
     # trim first two and last one line
-    response.body.lines[3..-2].join)
+    response.body.lines[3..-2].join
   end
 
 end

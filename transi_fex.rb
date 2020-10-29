@@ -3,22 +3,23 @@ require 'json'
 require 'parallel'
 require 'transifex'
 require './common'
-include Common
+
 # Class for all vars and methods for Transifex
 class TransiFex
   LANG_MAP = {"es"=>"es", "fr"=>"fr", "ja"=>"ja", "pt_br"=>"pt_BR", "zh_cn"=>"zh_CN"}
   def initialize(langs, project_name, resource_names, work_dir)
     @project_name = project_name
     @resource_names = resource_names
-    @work_dir = work_dir
+    @work_dir = work_dir+'/'+'transifex'
     @langs = langs
+    Common::create_work_dir(@work_dir)
     authentiate
   end
 
   def authentiate
     Transifex.configure do |t|
-      t.client_login = auth['transifex']['username']
-      t.client_secret = auth['transifex']['password']
+      t.client_login = Common::auth['transifex']['username']
+      t.client_secret = Common::auth['transifex']['password']
     end
   end
 
@@ -40,7 +41,7 @@ class TransiFex
   end
 
   def write_tx(r_name, lang, content)
-    @project = Transifex::Project.new('foreman')
+    @project = Transifex::Project.new(@project_name)
     options = { :i18n_type => "PO", :content => content }
     begin
       @project.resource(r_name).translation(LANG_MAP[lang]).update(options)
