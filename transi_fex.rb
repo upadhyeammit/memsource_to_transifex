@@ -7,12 +7,12 @@ require './common'
 # Class for all vars and methods for Transifex
 class TransiFex
   LANG_MAP = {"es"=>"es", "fr"=>"fr", "ja"=>"ja", "pt_br"=>"pt_BR", "zh_cn"=>"zh_CN"}
+  attr_reader :work_dir
   def initialize(langs, project_name, resource_names, work_dir)
     @project_name = project_name
     @resource_names = resource_names
     @work_dir = work_dir+'/'+'transifex'
     @langs = langs
-    Common::create_work_dir(@work_dir)
     authentiate
   end
 
@@ -40,7 +40,7 @@ class TransiFex
     resource.translation(lang).fetch
   end
 
-  def write_tx(r_name, lang, content)
+  def write_tx(r_name, lang, content, filesystem)
     @project = Transifex::Project.new(@project_name)
     options = { :i18n_type => "PO", :content => content }
     begin
@@ -48,12 +48,12 @@ class TransiFex
     rescue StandardError => e
       puts e.message
       puts "** Failed to upload translation for project #{r_name} and lang #{lang}"
-      if @mode == 'memsource'
-        unless Dir.exist?("#{@work_dir}/#{r_name}")
-          Dir.mkdir("#{@work_dir}/#{r_name}")
+      if !filesystem && e.message != 'Not Found'
+        unless Dir.exist?("#{@work_dir}/#{r_name}/#{lang}")
+          FileUtils.mkdir_p("#{@work_dir}/#{r_name}/#{lang}")
         end
         puts "** Writing file to #{@work_dir}/#{r_name}/#{lang} for investigation"
-        f = File.new("#{@work_dir}/#{r_name}/#{lang}", 'w')
+        f = File.new("#{@work_dir}/#{r_name}/#{lang}/#{r_name}.po", 'w')
         f.write(content)
       end
     end

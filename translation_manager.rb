@@ -5,6 +5,7 @@ require './transi_fex'
 # Class to handle different commands with respect to this tool
 class TransManager < Clamp::Command
   option ['--date'],'','[MemSource] (YYYY-MM-DD) Project create date on Memsource to selectively upload all projects uploaded on specific date', required: true
+  option ['--filesystem'], :flag ,'[TransiFex] Upload files from work dir. Useful after correcting pot files'
   option ['--lang_codes'],'','Only work on specific languages', default: %w[es fr ja pt_br zh_cn], multivalued: true
   option ['-m', '--memsource-to-transifex'], :flag, 'Upload translations from Memsource to Transifex'
   option ['--project-template'],'', '[MemSource] Project template id', default: nil
@@ -14,7 +15,9 @@ class TransManager < Clamp::Command
   parameter '[WORK_DIR]', 'Directory to save PO files if there is failure to upload those, useful to correct few bits and bytes', default: "/tmp/translations"
 
   def execute
-    Common::create_work_dir(work_dir)
+    [work_dir, work_dir+'/'+'transifex',work_dir+'/'+'memsource'].each do |dir|
+      Common::create_work_dir(dir,filesystem?)
+    end
     @memsource = MemSource.new(date, lang_codes_list, resource_names_list, work_dir)
     @transifex = TransiFex.new(lang_codes_list, project_name, resource_names_list, work_dir)
     # create work dir,if not created ask user to backup and clean it
@@ -74,6 +77,17 @@ class TransManager < Clamp::Command
     # Need to change date format to regex to use with memsource api
     regx_date = Regexp.new date
 
+    if filesystem?
+      Dir.children(@transifex.work_dir).each do |resource|
+        Dir.children("#{@transifex.work_dir}/#{resource}").each do |lang|
+          file_name = "#{@transifex.work_dir}/#{resource}/#{lang}/#{resource}.po"
+          content = File.new(file_name)
+          @transifex.write_tx(resource,lang,content.read,filesystem?)
+        end
+      end
+      return
+    end
+
     # The memsource api returns file in po format, so we dont save it on disk before upload
     project_ids_names = @memsource.project_ids_names(regx_date)
     if project_ids_names.empty?
@@ -84,7 +98,7 @@ class TransManager < Clamp::Command
       jobs.each do |job|
         translated_file = @memsource.pot_file(project.fetch('id'), job.fetch('uid'))
         puts "Uploading file for project #{project.fetch('name')} and for lang #{job.fetch('targetLang')}"
-        @transifex.write_tx(project.fetch('name'), job.fetch('targetLang'), translated_file)
+        @transifex.write_tx(project.fetch('name'), job.fetch('targetLang'), translated_file, filesystem?)
       end
     end
   end
