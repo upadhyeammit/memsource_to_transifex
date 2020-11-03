@@ -10,10 +10,10 @@ class MemSource
   DOMAIN_NAME = 'Satellite'
   PROJECT_TEMPLATE = 159694
   attr_reader :work_dir
-  def initialize(date, langs, resource_names, work_dir)
-    @project_upload_date = date #yyy-mm-dd
-    @langs = langs
-    @project_names = resource_names # this should be array
+  def initialize(work_dir, opts = {})
+    @project_upload_date = opts[:date]#yyy-mm-dd
+    @langs = opts[:langs]
+    @project_names = opts[:resources]# this should be array
     @work_dir = work_dir+'/'+'memsource'
     @resouce = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v1/", headers: { content_type: 'application/json' })
     authentiate

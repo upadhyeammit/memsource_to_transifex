@@ -8,11 +8,11 @@ require './common'
 class TransiFex
   LANG_MAP = {"es"=>"es", "fr"=>"fr", "ja"=>"ja", "pt_br"=>"pt_BR", "zh_cn"=>"zh_CN"}
   attr_reader :work_dir
-  def initialize(langs, project_name, resource_names, work_dir)
-    @project_name = project_name
-    @resource_names = resource_names
+  def initialize(work_dir, opts= {})
+    @project_name = opts[:project_name]
+    @resource_names = opts[:resources]
     @work_dir = work_dir+'/'+'transifex'
-    @langs = langs
+    @langs = opts[:langs]
     authentiate
   end
 
