@@ -4,67 +4,83 @@ require './mem_source.rb'
 require './transi_fex'
 # Class to handle different commands with respect to this tool
 class TransManager < Clamp::Command
-  option ['--date'],'','[MemSource] (YYYY-MM-DD) Project create date on Memsource to selectively upload all projects uploaded on specific date', required: true
-  option ['--filesystem'], :flag ,'[TransiFex] Upload files from work dir. Useful after correcting pot files'
-  option ['--lang_codes'],'','Only work on specific languages', default: %w[es fr ja pt_br zh_cn], multivalued: true
-  option ['-m', '--memsource-to-transifex'], :flag, 'Upload translations from Memsource to Transifex'
-  option ['--project-template'],'', '[MemSource] Project template id', default: nil
-  option ['--project-name'],'','[TransiFex] Project name', required: true
-  option ['--resource-names'], '', '[TransiFex] Only work on specific resources. Comma separated list', multivalued: true
-  option ['-t', '--transifex-to-memsource'], :flag, 'Upload translations from Transifex to Memsource'
-  parameter '[WORK_DIR]', 'Directory to save PO files if there is failure to upload those, useful to correct few bits and bytes', default: "/tmp/translations"
+  subcommand "transifex-to-memsource", 'Upload translations from Transifex to Memsource' do
+    option ['--filesystem'], :flag ,'[TransiFex] Upload files from work dir. Useful after correcting pot files'
+    option ['--project-name'],'','[TransiFex] Project name', required: true
+    option ['--project-template'],'', '[MemSource] Project template id', default: nil
+    option ['--resource-names'], '', '[TransiFex] Only work on specific resources. Comma separated list'
+    option ['--lang-codes'],'','Only work on specific languages. Comma separated list', default: %w[es fr ja pt_br zh_cn]
+    parameter '[WORK_DIR]', 'Directory to save PO files if there is failure to upload those, useful to correct few bits and bytes', default: "/tmp/translations"
 
-  def execute
+    def execute
+      create_env
+      @memsource = MemSource.new(work_dir, {:langs => lang_codes, :resources => resource_names, :project_template => project_template})
+      @transifex = TransiFex.new(work_dir, {:langs => lang_codes, :project_name => project_name, :resources => resource_names})
+      upload_to_memsource
+    end
+  end
+
+  subcommand "memsource-to-transifex", 'Upload translations from Memsource to Transifex' do
+    option ['--date'],'','[MemSource] (YYYY-MM-DD) Project create date on Memsource to selectively upload all projects uploaded on specific date', required: true
+    option ['--filesystem'], :flag ,'[TransiFex] Upload files from work dir. Useful after correcting pot files'
+    option ['--project-name'],'','[TransiFex] Project name', required: true
+    option ['--lang-codes'],'','Only work on specific languages', default: %w[es fr ja pt_br zh_cn]
+    parameter '[WORK_DIR]', 'Directory to save PO files if there is failure to upload those, useful to correct few bits and bytes', default: "/tmp/translations"
+
+    def execute
+      create_env
+      @memsource = MemSource.new(work_dir, {:date => date, :langs => lang_codes})
+      @transifex = TransiFex.new(work_dir, {:langs => lang_codes, :project_name => project_name})
+      upload_to_transifex
+    end
+  end
+
+  def create_env
+    lang_codes = lang_codes.split(',').sort if lang_codes.is_a?(String)
     [work_dir, work_dir+'/'+'transifex',work_dir+'/'+'memsource'].each do |dir|
       Common::create_work_dir(dir,filesystem?)
     end
-    @memsource = MemSource.new(date, lang_codes_list, resource_names_list, work_dir)
-    @transifex = TransiFex.new(lang_codes_list, project_name, resource_names_list, work_dir)
-    # create work dir,if not created ask user to backup and clean it
-
-    upload_to_memsource if transifex_to_memsource?
-    upload_to_transifex if memsource_to_transifex?
   end
 
   def upload_to_memsource
     memsource_project_uuid = {}
 
-    if !resource_names_list.empty?
-      tr_resources = resource_names_list.first.split(',').sort
+    if !resource_names.empty?
+      tr_resources = resource_names.split(',').sort
     else
       tr_resources = @transifex.resources.map {|res| res.fetch('slug')}.sort
     end
 
-    puts "Creating directories for #{tr_resources}"
+    puts "Creating directories for #{tr_resources.join(',')}"
     # Create project directories and languages directories
-    memsource_project_uuid.each do |name, _|
+    tr_resources.each do |name, _|
       project_dir = @transifex.work_dir+'/'+name
       Common::create_work_dir(project_dir)
-      lang_codes_list.each {|lang| create_work_dir(project_dir+'/'+lang)}
+      lang_codes.each {|lang| Common::create_work_dir(project_dir+'/'+lang)}
     end
 
-    puts "Downloading translations for #{tr_resources} and languages #{lang_codes_list}"
+    puts "Downloading translations for #{tr_resources.join(',')} and languages #{lang_codes.join(',')}"
     # Need to download the file and save it because transifex does not return
     # file in .po format unless file_path is provided to save it
     # Download the translation of every lang_codes_list for every resource
-    memsource_project_uuid.each do |name,uuid|
-      lang_codes_list.each do |code|
+    tr_resources.each do |name|
+      lang_codes.each do |code|
         file_path = @transifex.work_dir+'/'+name+'/'+code+'/'+name+'.po'
         @transifex.translation(name, TransiFex::LANG_MAP.fetch(code), file_path)
       end
     end
 
-    puts "Creating #{tr_resources} projects on MemSource"
+    puts "Creating #{tr_resources.join(',')} projects on MemSource"
     # Create respective projects on memsource
     tr_resources.each do |res|
       project_uuid = @memsource.create_project(res, project_template || MemSource::PROJECT_TEMPLATE)
       memsource_project_uuid[res] = project_uuid
     end
 
-    puts "Uploading translations for #{tr_resources}"
+    puts "Uploading translations for #{tr_resources.join(',')}"
     # Upload the translations to memsource
     memsource_project_uuid.each do |name, uuid|
-      lang_codes_list.each do |code|
+      lang_codes.each do |code|
         file_path = @transifex.work_dir+'/'+name+'/'+code+'/'+name+'.po'
         file_content = File.open(file_path,'r')
         @memsource.upload_locale(uuid, file_content, name+'.po', TransiFex::LANG_MAP.fetch(code))
