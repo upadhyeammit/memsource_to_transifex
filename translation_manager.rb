@@ -10,10 +10,12 @@ class TransManager < Clamp::Command
     option ['--project-template'],'', '[MemSource] Project template id', default: nil
     option ['--resource-names'], '', '[TransiFex] Only work on specific resources. Comma separated list'
     option ['--lang-codes'],'','Only work on specific languages. Comma separated list', default: %w[es fr ja pt_br zh_cn]
+    option ['--file-import-settings-uid'],'','File import settings if any?', default: nil
     parameter '[WORK_DIR]', 'Directory to save PO files if there is failure to upload those, useful to correct few bits and bytes', default: "/tmp/translations"
 
     def execute
       create_env
+
       @memsource = MemSource.new(work_dir, {:langs => lang_codes, :resources => resource_names, :project_template => project_template})
       @transifex = TransiFex.new(work_dir, {:langs => lang_codes, :project_name => project_name, :resources => resource_names})
       upload_to_memsource
@@ -83,7 +85,11 @@ class TransManager < Clamp::Command
       lang_codes.each do |code|
         file_path = @transifex.work_dir+'/'+name+'/'+code+'/'+name+'.po'
         file_content = File.open(file_path,'r')
-        @memsource.upload_locale(uuid, file_content, name+'.po', TransiFex::LANG_MAP.fetch(code))
+        if !file_import_settings_uid.nil?
+          @memsource.upload_locale(uuid, file_content, name+'.po', TransiFex::LANG_MAP.fetch(code), file_import_settings_uid)
+        else
+          @memsource.upload_locale(uuid, file_content, name+'.po', TransiFex::LANG_MAP.fetch(code))
+        end
       end
     end
   end

@@ -9,6 +9,7 @@ class MemSource
   MEMSOURCE_API_URL = 'https://cloud.memsource.com/web/'
   DOMAIN_NAME = 'Satellite'
   PROJECT_TEMPLATE = 159694
+  FILE_IMPORT_SETTINGS = 'klaukC1BdwmS5aH0mTCHD6'
   attr_reader :work_dir
   def initialize(work_dir, opts = {})
     @project_upload_date = opts[:date]#yyy-mm-dd
@@ -54,8 +55,9 @@ class MemSource
     JSON.parse(response.body)['uid']
   end
 
-  def upload_locale(project_uuid, content, file_name, lang)
-    rest_client = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v1/projects/#{project_uuid}/jobs?token=#{@token}", headers: {content_type: 'application/octet-stream', 'Content-Disposition': "filename=#{file_name}", 'Memsource': "{'targetLangs': [#{lang}]}" })
+  def upload_locale(project_uuid, content, file_name, lang, import_settings_uid)
+    metadata = "{'targetLangs': [#{lang}], 'importSettings': {'uid': #{import_settings_uid}}}"
+    rest_client = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v1/projects/#{project_uuid}/jobs?token=#{@token}", headers: {content_type: 'application/octet-stream', 'Content-Disposition': "filename=#{file_name}", 'Memsource': metadata })
     response = rest_client.post(content)
   end
 
@@ -65,4 +67,20 @@ class MemSource
     response.body.lines[3..-2].join
   end
 
+  def create_file_import_setting(name, po_regex)
+    rest_client = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v1/importSettings?token=#{@token}", headers: {content_type: 'application/json'})
+    payload = {'name' => name => {'po'=> {'tagRegexp' => po_regex}}}.to_json
+    response = rest_client.post(payload)
+  end
+
+  def list_file_import_settings
+    rest_client = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v1/importSettings?token=#{@token}")
+    response = rest_client.get
+    JSON.parse(response.body)
+  end
+
+  def delete_file_import_setting(uid)
+    rest_client = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v1/importSettings/#{uid}?token=#{@token}")
+    rest_client.delete
+  end
 end
