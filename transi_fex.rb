@@ -34,6 +34,7 @@ class TransiFex
   end
 
   def translation(resource, lang, file_path='')
+    puts "Downloading translations for #{resource} and lang #{lang}"
     resource = resources(resource) if resource.is_a?(String)
     return resource.translation(lang).fetch_with_file(path_to_file: file_path) if !file_path.empty?
 
