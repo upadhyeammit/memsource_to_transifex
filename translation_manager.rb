@@ -119,8 +119,10 @@ class TransManager < Clamp::Command
       jobs = @memsource.get_jobs(project.fetch('id'))
       jobs.each do |job|
         translated_file = @memsource.pot_file(project.fetch('id'), job.fetch('uid'))
-        puts "Uploading file for project #{project.fetch('name')} and for lang #{job.fetch('targetLang')}"
-        @transifex.write_tx(project.fetch('name'), job.fetch('targetLang'), translated_file, filesystem?)
+        if lang_codes.include?(job.fetch('targetLang'))
+          puts "Uploading file for project #{project.fetch('name')} and for lang #{job.fetch('targetLang')}"
+          @transifex.write_tx(project.fetch('name'), job.fetch('targetLang'), translated_file, filesystem?)
+        end
       end
     end
   end
