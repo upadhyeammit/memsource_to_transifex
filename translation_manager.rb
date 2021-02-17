@@ -10,7 +10,7 @@ class TransManager < Clamp::Command
     option ['--project-template'],'', '[MemSource] Project template id', default: nil
     option ['--resource-names'], '', '[TransiFex] Only work on specific resources. Comma separated list'
     option ['--lang-codes'],'','Only work on specific languages. Comma separated list', default: %w[es fr ja pt_br zh_cn]
-    option ['--file-import-settings-uid'],'','File import settings if any?', default: nil
+    option ['--use-project-import-settings'], :flag, "[Memsource] Inherit project's file import settings", default: true
     parameter '[WORK_DIR]', 'Directory to save PO files if there is failure to upload those, useful to correct few bits and bytes', default: "/tmp/translations"
 
     def execute
@@ -85,11 +85,7 @@ class TransManager < Clamp::Command
       lang_codes.each do |code|
         file_path = @transifex.work_dir+'/'+name+'/'+code+'/'+name+'.po'
         file_content = File.open(file_path,'r')
-        if !file_import_settings_uid.nil?
-          @memsource.upload_locale(uuid, file_content, name+'.po', TransiFex::LANG_MAP.fetch(code), file_import_settings_uid)
-        else
-          @memsource.upload_locale(uuid, file_content, name+'.po', TransiFex::LANG_MAP.fetch(code))
-        end
+        @memsource.upload_locale(uuid, file_content, name+'.po', TransiFex::LANG_MAP.fetch(code), use_project_import_settings)
       end
     end
   end

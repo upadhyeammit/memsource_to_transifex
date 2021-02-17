@@ -55,9 +55,9 @@ class MemSource
     JSON.parse(response.body)['uid']
   end
 
-  def upload_locale(project_uuid, content, file_name, lang, import_settings_uid)
-    metadata = "{'targetLangs': [#{lang}], 'importSettings': {'uid': #{import_settings_uid}}}"
-    rest_client = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v1/projects/#{project_uuid}/jobs?token=#{@token}", headers: {content_type: 'application/octet-stream', 'Content-Disposition': "filename=#{file_name}", 'Memsource': metadata })
+  def upload_locale(project_uuid, content, file_name, lang, use_project_import_settings = true)
+    metadata = "{'targetLangs': [#{lang}]}"
+    rest_client = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v1/projects/#{project_uuid}/jobs?token=#{@token}", headers: {content_type: 'application/octet-stream', 'Content-Disposition': "filename=#{file_name}", useProjectFileImportSettings: use_project_import_settings, 'Memsource': metadata })
     response = rest_client.post(content)
   end
 
@@ -65,12 +65,6 @@ class MemSource
     response = RestClient.get "#{MEMSOURCE_API_URL}api2/v1/projects/#{project_id}/jobs/#{job_uuid}/targetFile/?token=#{@token}"
     # trim first two and last one line
     response.body.lines[3..-2].join
-  end
-
-  def create_file_import_setting(name, po_regex)
-    rest_client = RestClient::Resource.new("#{MEMSOURCE_API_URL}api2/v1/importSettings?token=#{@token}", headers: {content_type: 'application/json'})
-    payload = {'name' => name => {'po'=> {'tagRegexp' => po_regex}}}.to_json
-    response = rest_client.post(payload)
   end
 
   def list_file_import_settings
