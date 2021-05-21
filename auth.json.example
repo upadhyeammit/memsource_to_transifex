@@ -1,0 +1,9 @@
+{"transifex":{
+   "username":"username",
+   "password":"transifex-password"
+},
+"memsource":{
+  "username": "username",
+  "password": "memsource-password"
+}
+}
