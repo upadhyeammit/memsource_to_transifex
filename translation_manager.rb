@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+require 'parallel'
 require 'clamp'
 require './mem_source.rb'
 require './transi_fex'
@@ -8,14 +9,14 @@ class TransManager < Clamp::Command
     option ['--filesystem'], :flag ,'[TransiFex] Upload files from work dir. Useful after correcting pot files'
     option ['--project-name'],'','[TransiFex] Project name', required: true
     option ['--project-template'],'', '[MemSource] Project template id', default: nil
-    option ['--resource-names'], '', '[TransiFex] Only work on specific resources. Comma separated list'
+    option ['--resource-names'], '', '[TransiFex] Only work on specific resources. Comma separated list', default: ''
     option ['--lang-codes'],'','Only work on specific languages. Comma separated list', default: %w[es fr ja pt_br zh_cn]
     option ['--use-project-import-settings'], :flag, "[Memsource] Inherit project's file import settings", default: true
+    option ['--untranslated-only'], :flag, "[Transifex] Only upload resources which are untranslated for '--lang-codes'", default: true
     parameter '[WORK_DIR]', 'Directory to save PO files if there is failure to upload those, useful to correct few bits and bytes', default: "/tmp/translations"
 
     def execute
       create_env
-
       @memsource = MemSource.new(work_dir, {:langs => lang_codes, :resources => resource_names, :project_template => project_template})
       @transifex = TransiFex.new(work_dir, {:langs => lang_codes, :project_name => project_name, :resources => resource_names})
       upload_to_memsource
@@ -53,6 +54,21 @@ class TransManager < Clamp::Command
       tr_resources = @transifex.resources.map {|res| res.fetch('slug')}.sort
     end
 
+    if untranslated_only?
+      untranslated_resources = []
+      Parallel.each(tr_resources, in_threads: 25) do |res|
+        temp_resource = @transifex.resources(res)
+        lang_codes.each do |lang|
+          ln_code = @transifex.lang_map.fetch(lang)
+          if temp_resource.statistics.fetch(ln_code)['untranslated_entities'].positive?
+            untranslated_resources << temp_resource.resource_slug
+            break
+          end
+        end
+      end
+      tr_resources = untranslated_resources
+    end
+
     puts "Creating directories for #{tr_resources.join(',')}"
     # Create project directories and languages directories
     tr_resources.each do |name, _|
@@ -85,7 +101,7 @@ class TransManager < Clamp::Command
       lang_codes.each do |code|
         file_path = @transifex.work_dir+'/'+name+'/'+code+'/'+name+'.po'
         file_content = File.open(file_path,'r')
-        @memsource.upload_locale(uuid, file_content, name+'.po', TransiFex::LANG_MAP.fetch(code), use_project_import_settings)
+        @memsource.upload_locale(uuid, file_content, name+'.po', TransiFex::LANG_MAP.fetch(code), use_project_import_settings?)
       end
     end
   end
@@ -111,6 +127,7 @@ class TransManager < Clamp::Command
     if project_ids_names.empty?
       raise "Can't find any projects matching with #{date} filter"
     end
+
     project_ids_names.each do |project|
       jobs = @memsource.get_jobs(project.fetch('id'))
       jobs.each do |job|
