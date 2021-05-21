@@ -38,7 +38,7 @@ class TransManager < Clamp::Command
   end
 
   def create_env
-    lang_codes = lang_codes.split(',').sort if lang_codes.is_a?(String)
+    self.lang_codes = lang_codes.split(',').sort if lang_codes.is_a?(String)
     [work_dir, work_dir+'/'+'transifex',work_dir+'/'+'memsource'].each do |dir|
       Common::create_work_dir(dir,filesystem?)
     end
