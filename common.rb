@@ -1,4 +1,12 @@
+# frozen_string_literal: true
+
 # A placeholder for common methods for Memsource and Transifex
+require 'parallel'
+require 'clamp'
+require 'rest-client'
+require 'json'
+require 'transifex'
+
 module Common
   def self.parse_json(body)
     JSON.parse(body)
@@ -8,7 +16,7 @@ module Common
     parse_json(File.read('auth.json'))
   end
 
-  def self.create_work_dir(name,filesystem = false)
+  def self.create_work_dir(name, filesystem = false)
     if !Dir.exist?(name)
       puts "Creating work directory for #{name}"
       Dir.mkdir(name)
