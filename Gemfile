@@ -1,0 +1,5 @@
+source 'https://rubygems.org'
+gem 'clamp'
+gem 'json'
+gem 'parallel'
+gem 'transifex-interface-ruby'
